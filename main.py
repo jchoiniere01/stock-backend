@@ -22,18 +22,47 @@ origins = [
     "http://127.0.0.1:5174",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:5175",
+    "http://127.0.0.1:5175",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-Tickers = ["AAPL", "MSFT", "JNJ", "T", "KO",
-           "PFE", "INTC", "VZ", "F", "BAC",           
-           ]  # small universe for now
+Tickers = [
+    # Mega-cap tech / growth
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
+    "META", "AVGO", "TSLA", "ADBE", "ORCL",
+    "CRM", "INTC", "AMD", "MU", "NFLX",
+
+    # Financials (banks, payments, asset managers, insurers)
+    "JPM", "BAC", "WFC", "GS", "MS",
+    "V", "MA", "AXP", "BLK", "SCHW",
+    "C", "USB", "PNC", "CB", "AIG",
+
+    # Healthcare (big pharma / med devices / insurers)
+    "JNJ", "PFE", "MRK", "ABBV", "LLY",
+    "BMY", "AMGN", "MDT", "UNH", "HUM",
+
+    # Consumer staples / dividend names
+    "PG", "KO", "PEP", "KHC", "GIS",
+    "CL", "KMB", "MO", "PM", "COST",
+    "WMT", "TGT",
+
+    # Industrials / energy / REITs / utilities
+    "CAT", "UNP", "DE", "GE", "HON",
+    "XOM", "CVX", "COP", "SLB", "EOG",
+    "DUK", "NEE", "SO", "O", "VICI",
+
+    # Telecom / discretionary / others
+    "T", "VZ", "UPS", "HD", "LOW",
+    "MCD", "SBUX", "DIS",
+]
 
 
 @app.get("/stocks")

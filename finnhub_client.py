@@ -1,5 +1,6 @@
 import os
 import requests
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,7 +10,7 @@ BASE_URL = "https://finnhub.io/api/v1"
 
 PROFILE_CACHE: dict[str, dict] = {}
 FINANCIALS_CACHE: dict[str, dict] = {}
-QUOTE_CACHE: dict[str, dict] = {}
+QUOTE_CACHE: dict[str, tuple[dict, float]] = {}
 CANDLES_CACHE: dict[tuple[str, str], dict] = {}  # (symbol, resolution) -> candles
 
 
@@ -58,12 +59,22 @@ def get_financials(symbol: str) -> dict:
     return data
 
 
+QUOTE_TTL_SECONDS = 5 * 60  # 5 minutes
+
 def get_quote(symbol: str) -> dict:
     symbol = symbol.upper()
-    if symbol in QUOTE_CACHE:
-        return QUOTE_CACHE[symbol]
+    now = time.time()
+
+    # If we have a recent quote, return it
+    cached = QUOTE_CACHE.get(symbol)
+    if cached is not None:
+        data, fetched_at = cached
+        if now - fetched_at < QUOTE_TTL_SECONDS:
+            return data
+
+    # Otherwise fetch a fresh quote
     data = _get("/quote", {"symbol": symbol})
-    QUOTE_CACHE[symbol] = data
+    QUOTE_CACHE[symbol] = (data, now)
     return data
 
 
