@@ -1,0 +1,25 @@
+{
+  "ticker": "AAPL",
+  "companyName": "Apple Inc.",
+  "metrics": {
+    "roe": 0.25,
+    "operatingMargin": 0.30,
+    "fcfMargin": 0.22,
+    "revenueCagr5y": 0.08,
+    "epsCagr5y": 0.10,
+    "debtToEquity": 1.5,
+    "interestCoverage": 12.0,
+    "forwardPE": 24.0,
+    "priceToFcf": 20.0,
+    "dividendYield": 0.006,
+    "payoutRatio": 0.20,
+    "dividendCagr5y": 0.05,
+    "priceVs200dmaPct": 0.10,
+    "maxDrawdown5yPct": -0.35
+  },
+  "scores": {
+    "income": 0.73,
+    "balanced": 0.68,
+    "growth": 0.62
+  }
+}
