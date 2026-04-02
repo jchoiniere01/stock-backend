@@ -70,9 +70,11 @@ def get_quote(symbol: str) -> dict:
     if cached is not None:
         data, fetched_at = cached
         if now - fetched_at < QUOTE_TTL_SECONDS:
+            print(f"QUOTE CACHE HIT")
             return data
 
     # Otherwise fetch a fresh quote
+    print(f"QUOTE API CALL: {symbol}")
     data = _get("/quote", {"symbol": symbol})
     QUOTE_CACHE[symbol] = (data, now)
     return data

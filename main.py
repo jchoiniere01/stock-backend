@@ -1,16 +1,17 @@
 from typing import List, Literal
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from finnhub_client import (
     get_company_profile,
     get_financials,
     get_quote,
+    PROFILE_CACHE,
+    FINANCIALS_CACHE,
+    QUOTE_CACHE,
     FinnhubError,
 )
-from metrics import (
-    parse_finnhub_metrics,
-)
+from metrics import parse_finnhub_metrics
 from scoring import compute_score
 
 app = FastAPI(title="Stock Dashboard Backend")
@@ -24,6 +25,7 @@ origins = [
     "http://127.0.0.1:3000",
     "http://localhost:5175",
     "http://127.0.0.1:5175",
+    # "https://your-frontend-domain.vercel.app",
 ]
 
 app.add_middleware(
@@ -35,44 +37,52 @@ app.add_middleware(
 )
 
 Tickers = [
-    # Mega-cap tech / growth
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
     "META", "AVGO", "TSLA", "ADBE", "ORCL",
     "CRM", "INTC", "AMD", "MU", "NFLX",
-
-    # Financials (banks, payments, asset managers, insurers)
     "JPM", "BAC", "WFC", "GS", "MS",
     "V", "MA", "AXP", "BLK", "SCHW",
     "C", "USB", "PNC", "CB", "AIG",
-
-    # Healthcare (big pharma / med devices / insurers)
     "JNJ", "PFE", "MRK", "ABBV", "LLY",
     "BMY", "AMGN", "MDT", "UNH", "HUM",
-
-    # Consumer staples / dividend names
     "PG", "KO", "PEP", "KHC", "GIS",
     "CL", "KMB", "MO", "PM", "COST",
     "WMT", "TGT",
-
-    # Industrials / energy / REITs / utilities
     "CAT", "UNP", "DE", "GE", "HON",
     "XOM", "CVX", "COP", "SLB", "EOG",
     "DUK", "NEE", "SO", "O", "VICI",
-
-    # Telecom / discretionary / others
     "T", "VZ", "UPS", "HD", "LOW",
     "MCD", "SBUX", "DIS",
 ]
-
 
 @app.get("/stocks")
 def get_stocks(
     priority: Literal["Income", "Balanced", "Growth"] = Query("Income"),
     budget: float | None = Query(None, description="Amount available to invest"),
+    tickers: List[str] = Query(
+        default=[],
+        description="Optional list of up to 25 tickers to include",
+    ),
+    category: str | None = Query(
+        default=None,
+        description="Optional category/sector filter, e.g. 'Technology' or 'Financials'",
+    ),
+    min_price: float | None = Query(default=None, ge=0),
+    max_price: float | None = Query(default=None, ge=0),
+    min_rank: int | None = Query(default=None, ge=1),
+    max_rank: int | None = Query(default=None, ge=1),
 ):
-    records: List[dict] = []
+    if len(tickers) > 25:
+        raise HTTPException(
+            status_code=400,
+            detail="You can select at most 25 tickers.",
+        )
 
-    for symbol in Tickers:
+    symbols = list(dict.fromkeys(tickers or Tickers))
+
+    records: list[dict] = []
+
+    for symbol in symbols:
         try:
             profile = get_company_profile(symbol)
             financials = get_financials(symbol)
@@ -82,35 +92,40 @@ def get_stocks(
 
         base_metrics = parse_finnhub_metrics(financials)
 
-        # --- price and budget logic ---
-        current_price = quote.get("c")  # Finnhub /quote current price
+        if category:
+            sector = profile.get("finnhubIndustry") or ""
+            if category.lower() not in sector.lower():
+                continue
+
+        current_price = quote.get("c")
         if isinstance(current_price, (int, float)):
             base_metrics["price"] = float(current_price)
         else:
             base_metrics["price"] = None
 
-        if budget is not None and base_metrics["price"]:
-            base_metrics["maxWholeSharesAtBudget"] = int(
-                budget // base_metrics["price"]
-            )
+        price = base_metrics["price"]
+        if price is not None:
+            if min_price is not None and price < min_price:
+                continue
+            if max_price is not None and price > max_price:
+                continue
+
+        if budget is not None and price:
+            base_metrics["maxWholeSharesAtBudget"] = int(budget // price)
         else:
             base_metrics["maxWholeSharesAtBudget"] = None
 
-        # NEW: projected annual dividend income (per ticker)
         dividend_per_share = base_metrics.get("dividendPerShareTTM")
         shares = base_metrics.get("maxWholeSharesAtBudget")
-        projected_annual_income = None
-        if dividend_per_share is not None and shares is not None:
-            projected_annual_income = dividend_per_share * shares
+        projected_annual_income = (
+            dividend_per_share * shares
+            if dividend_per_share is not None and shares is not None
+            else None
+        )
         base_metrics["projectedAnnualIncome"] = projected_annual_income
-        # --- end projected income logic ---
 
-        # Skip unaffordable stocks completely
-        if budget is not None and (
-            base_metrics["price"] is None or base_metrics["price"] > budget
-        ):
+        if budget is not None and (price is None or price > budget):
             continue
-        # --- end price and budget logic ---
 
         scores = {
             "income": compute_score("Income", base_metrics),
@@ -130,5 +145,28 @@ def get_stocks(
         records.append(record)
 
     records.sort(key=lambda r: r["selectedScore"], reverse=True)
+
+    if min_rank is not None or max_rank is not None:
+        ranked: list[dict] = []
+        for idx, rec in enumerate(records, start=1):
+            rank = idx
+            if min_rank is not None and rank < min_rank:
+                continue
+            if max_rank is not None and rank > max_rank:
+                continue
+            rec["rank"] = rank
+            ranked.append(rec)
+        records = ranked
+    else:
+        for idx, rec in enumerate(records, start=1):
+            rec["rank"] = idx
+
     return {"priority": priority, "stocks": records}
 
+@app.get("/debug/cache")
+def debug_cache():
+    return {
+        "profiles_cached": len(PROFILE_CACHE),
+        "financials_cached": len(FINANCIALS_CACHE),
+        "quotes_cached": len(QUOTE_CACHE),
+    }

@@ -24,6 +24,8 @@ def parse_finnhub_metrics(financials: Dict[str, Any]) -> Dict[str, Any]:
     dividend_per_share = to_float("dividendPerShareTTM")
     eps_ttm = to_float("epsTTM")
 
+    forward_pe = to_float("peForward")
+
     #Simple Payout ration: dividends per share / EPS
     payout_ratio = None
     if dividend_per_share is not None and eps_ttm not in (None, 0):
