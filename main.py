@@ -78,6 +78,8 @@ def get_stocks(
             detail="You can select at most 25 tickers.",
         )
 
+    print("tickers received:", tickers)
+
     symbols = list(dict.fromkeys(tickers or Tickers))
 
     records: list[dict] = []
